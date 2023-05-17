@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Map</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-ajax/2.1.0/leaflet.ajax.min.js"></script>
+  
+  <style>
+    .toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.toggle-switch-checkbox {
+  display: none;
+}
+
+.toggle-switch-label {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-color: #ccc;
+  border-radius: 34px;
+}
+
+.toggle-switch-inner {
+  display: block;
+  height: 100%;
+  width: 50%;
+  margin-left: 0;
+  transition: margin-left 0.3s ease-in-out;
+  background-color: white;
+  border-radius: 34px;
+}
+
+.toggle-switch-checkbox:checked + .toggle-switch-label .toggle-switch-inner {
+  margin-left: 50%;
+}
+
+.toggle-switch-switch {
+  display: block;
+  width: 25%;
+  height: 80%;
+  margin: 6% 0 6% 0%;
+  background-color: #fff;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 30px;
+  border-radius: 34px;
+  transition: all 0.3s ease-in-out;
+}
+
+.toggle-switch-checkbox:checked + .toggle-switch-label .toggle-switch-switch {
+  right: 0;
+}
+
+  </style>
+</head>
+<body>
+  <div id="mapid" style="height: 500px;"></div>
+  <div class="toggle-switch">
+    <input type="checkbox" id="toggle-restaurants" class="toggle-switch-checkbox">
+    <label for="toggle-restaurants" class="toggle-switch-label">
+      <span class="toggle-switch-inner"></span>
+      <span class="toggle-switch-switch"></span>
+    </label>
+  </div>
+  <button id="floodProne">Flood Prone Area</button>
+  <button id="toggleButton">Toggle BBMP GeoJSON</button>
+  <button id="densityButton">Calculate Population Density</button>
+
+  
+
+
+  <script>
+    var map = L.map('mapid').setView([12.971, 77.794], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors',
+      maxZoom: 18
+    }).addTo(map);
+    var marker = L.marker([12.9, 77.794]).addTo(map);
+    map.on('click', function(e) {
+      marker.setLatLng(e.latlng);
+      var lat = marker.getLatLng().lat.toFixed(6);
+      var lon = marker.getLatLng().lng.toFixed(6);
+      var minutes = prompt("Enter time in minutes:");
+      var seconds=minutes;
+      fetch('/isochrone', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({'lat': lat, 'lon': lon,'sec':seconds})
+      }).then(function(response) {
+        return response.json();
+      }).then(function(data) {
+        L.geoJSON(data).addTo(map);
+      });
+    });
+    
+// Get the toggle switch checkbox element
+// Get the toggle switch checkbox element
+var toggleSwitch = document.getElementById('toggle-restaurants');
+var toggleFloodProne=document.getElementById('toggle-floodprone');
+
+// Create a layer group for the restaurant markers
+var restaurantLayer = L.layerGroup();
+var floodlayer=L.layerGroup();
+
+// Add event listener for checkbox change
+toggleSwitch.addEventListener('change', function() {
+  if (this.checked) {
+    // If checkbox is checked, make the XHR request to get pizza restaurants and show them on the map
+    getPizzaRestaurants();
+  } else {
+    // If checkbox is unchecked, remove the restaurant layer from the map
+    removeRestaurantLayer();
+  }
+});
+
+// Function to make XHR request to get pizza restaurants and show them on the map
+function getPizzaRestaurants() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/pizza-restaurants', true);
+  xhr.setRequestHeader('Content-type', 'application/json');
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === XMLHttpRequest.DONE) {
+      if (xhr.status === 200) {
+        var data = JSON.parse(xhr.responseText);
+        // Use the response from the server to update the restaurant layer on the map
+        updateRestaurantLayer(data);
+      } else {
+        console.log('Error: ' + xhr.status);
+      }
+    }
+  };
+  xhr.send();
+}
+
+// Function to update the restaurant layer on the map
+function updateRestaurantLayer(restaurantData) {
+  // Check if the restaurant layer is already on the map
+  if (!map.hasLayer(restaurantLayer)) {
+    // If not, add it to the map
+    restaurantLayer.addTo(map);
+  }
+
+  // Clear existing restaurant markers from the layer
+  restaurantLayer.clearLayers();
+
+  // Add the restaurant markers to the layer
+  for (var i = 0; i < restaurantData.length; i++) {
+    var restaurant = restaurantData[i];
+  var color = restaurant.name === "Domino's" ? 'blue' : 'red';
+  var circle = L.circle([restaurant.lat, restaurant.lon], {
+    color: color,
+    fillColor: color,
+    fillOpacity: 0.5,
+    radius: 100, // Adjust the radius of the circle as needed
+  });
+  circle.bindPopup(restaurant.name);
+  restaurantLayer.addLayer(circle);
+  }
+}
+
+// Function to remove the restaurant layer from the map
+function removeRestaurantLayer() {
+  // Remove the restaurant layer from the map if it exists
+  if (map.hasLayer(restaurantLayer)) {
+    restaurantLayer.clearLayers(); // Clear the markers from the layer
+    map.removeLayer(restaurantLayer); // Remove the layer from the map
+  }
+}
+
+var floodProneLayer; // Variable to store the flood-prone areas layer
+
+// Function to retrieve flood-prone areas from the server and add the layer
+function getFloodProneAreas() {
+  // Make an AJAX request to the server
+  fetch('/flood-prone-areas')
+    .then(function(response) {
+      return response.json();
+    })
+    .then(function(data) {
+      // Create a Leaflet GeoJSON layer with the flood-prone areas data
+      console.log(data)
+      floodProneLayer = L.geoJSON(data, {
+        pointToLayer: function(feature, latlng) {
+          return L.circleMarker(latlng, {
+            radius: 6,
+            color: 'red',
+            fillColor: 'red',
+            fillOpacity: 1
+          });
+        }
+      }).addTo(map);
+    })
+    .catch(function(error) {
+      console.log('Error:', error);
+    });
+}
+
+// Function to remove the flood-prone areas layer from the map
+function removeFloodProneLayer() {
+  if (floodProneLayer) {
+    map.removeLayer(floodProneLayer);
+    floodProneLayer = null;
+  }
+}
+
+// Event listener for the button click
+document.getElementById('floodProne').addEventListener('click', function() {
+  if (floodProneLayer) {
+    // Layer exists, so remove it
+    removeFloodProneLayer();
+  } else {
+    // Layer doesn't exist, so retrieve and add it
+    getFloodProneAreas();
+  }
+});
+
+
+
+// Function to handle the toggle event
+
+// Function to load the GeoJSON data and add it to the layer
+
+// Create a GeoJSON layer for the MultiPolygon
+// Create a GeoJSON layer for the MultiPolygon
+var geojsonLayer = L.geoJSON(null, {
+    style: {
+        fillColor: '#3388ff',
+        weight: 1,
+        opacity: 1,
+        color: '#3388ff',
+        fillOpacity: 0.2
+    },
+    onEachFeature: function(feature, layer) {
+        layer.bindTooltip(feature.properties.WARD_NO.toString(), {
+            permanent: false,
+            direction: 'auto'
+        });
+    }
+});
+
+// Function to toggle the display of the GeoJSON layer
+function toggleGeoJSONLayer() {
+    if (map.hasLayer(geojsonLayer)) {
+        map.removeLayer(geojsonLayer);
+    } else {
+        // Fetch the GeoJSON file and add it to the GeoJSON layer
+        fetch('/static/BBMP.GeoJSON')
+            .then(function(response) {
+                return response.json();
+            })
+            .then(function(data) {
+                geojsonLayer.addData(data);
+                map.addLayer(geojsonLayer);
+            });
+    }
+}
+
+// Add event listener to the toggle button
+document.getElementById('toggleButton').addEventListener('click', toggleGeoJSONLayer);
+// Get the button element
+// Get the button element
+var densityButton = document.getElementById('densityButton');
+
+// Define a variable to keep track of the density layer
+var densityLayer = null;
+
+// Add event listener for button click
+densityButton.addEventListener('click', function() {
+  // Check if the density layer already exists
+  if (densityLayer) {
+    // If the layer exists, remove it from the map
+    map.removeLayer(densityLayer);
+    densityLayer = null; // Reset the density layer variable
+  } else {
+    // If the layer doesn't exist, calculate and display the population density heatmap
+    calculatePopulationDensity();
+  }
+});
+
+// Function to calculate and display the population density heatmap
+function calculatePopulationDensity() {
+  // Fetch the GeoJSON file
+  fetch('/static/bbmp.geojson')
+    .then(function(response) {
+      return response.json();
+    })
+    .then(function(data) {
+      // Calculate the population density for each feature
+      data.features.forEach(function(feature) {
+        var population = feature.properties.POP_TOTAL;
+        var area = feature.properties.AREA_SQ_KM;
+        var density = population / area;
+
+        // Set the population density as a new property in the feature
+        feature.properties.population_density = density;
+      });
+
+      // Create the density heatmap layer using population density
+      densityLayer = L.geoJSON(data, {
+        style: function(feature) {
+          // Set the fill color based on the population density value
+          var density = feature.properties.population_density;
+          return {
+            fillColor: getDensityColor(density),
+            weight: 1,
+            opacity: 1,
+            color: '#000',
+            fillOpacity: 0.7
+          };
+        },
+        onEachFeature: function(feature, layer) {
+          layer.bindTooltip('Population Density: ' + feature.properties.population_density.toFixed(2), {
+            permanent: false,
+            direction: 'auto'
+          });
+        }
+      });
+
+      // Add the density heatmap layer to the map
+      densityLayer.addTo(map);
+    });
+}
+
+// Function to get the color based on the population density value
+function getDensityColor(density) {
+  // Define the color ranges based on population density levels
+  var colors = [
+    [5000, '#f7fbff'],
+    [10000, '#deebf7'],
+    [15000, '#c6dbef'],
+    [20000, '#9ecae1'],
+    [25000, '#6baed6'],
+    [30000, '#4292c6'],
+    [35000, '#2171b5'],
+    [40000, '#08519c'],
+    [45000, '#08306b']
+  ];
+
+  // Find the appropriate color for the given density value
+  for (var i = 0; i < colors.length; i++) {
+    if (density <= colors[i][0]) {
+      return colors[i][1];
+    }
+  }
+
+  // Return a default color if density value exceeds the defined ranges
+  return '#000';
+}
+
+
+  </script>
+</body>
+</html>
