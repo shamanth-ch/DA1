@@ -85,7 +85,34 @@ def get_geojson():
     return app.send_static_file('BBMP.GeoJSON')
 
 
+@app.route('/GET-malls', methods=['GET','POST'])
+def get_malls():
+    api = overpy.Overpass()
+    query = '''
+      [out:json];
+area[name="Bengaluru"]->.searchArea;
+(
+  node["shop"="mall"](area.searchArea);
+  way["shop"="mall"](area.searchArea);
+  relation["shop"="mall"](area.searchArea);
+);
+out center;
 
+
+
+
+        '''
+    result = api.query(query)
+    
+    nodes = []
+    for node in result.nodes:
+        nodes.append({
+            'name': node.tags['name'],
+            'lat': node.lat,
+            'lon': node.lon
+        })
+    
+    return jsonify(nodes)   
 
 
 if __name__ == '__main__':

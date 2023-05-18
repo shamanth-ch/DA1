@@ -6,77 +6,16 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-ajax/2.1.0/leaflet.ajax.min.js"></script>
   
-  <style>
-    .toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 60px;
-  height: 34px;
-}
-
-.toggle-switch-checkbox {
-  display: none;
-}
-
-.toggle-switch-label {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-  position: absolute;
-  top: 0;
-  left: 0;
-  background-color: #ccc;
-  border-radius: 34px;
-}
-
-.toggle-switch-inner {
-  display: block;
-  height: 100%;
-  width: 50%;
-  margin-left: 0;
-  transition: margin-left 0.3s ease-in-out;
-  background-color: white;
-  border-radius: 34px;
-}
-
-.toggle-switch-checkbox:checked + .toggle-switch-label .toggle-switch-inner {
-  margin-left: 50%;
-}
-
-.toggle-switch-switch {
-  display: block;
-  width: 25%;
-  height: 80%;
-  margin: 6% 0 6% 0%;
-  background-color: #fff;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 30px;
-  border-radius: 34px;
-  transition: all 0.3s ease-in-out;
-}
-
-.toggle-switch-checkbox:checked + .toggle-switch-label .toggle-switch-switch {
-  right: 0;
-}
-
-  </style>
+  
 </head>
 <body>
   <div id="mapid" style="height: 500px;"></div>
-  <div class="toggle-switch">
-    <input type="checkbox" id="toggle-restaurants" class="toggle-switch-checkbox">
-    <label for="toggle-restaurants" class="toggle-switch-label">
-      <span class="toggle-switch-inner"></span>
-      <span class="toggle-switch-switch"></span>
-    </label>
-  </div>
+  <button id="toggleButton">Demographics data</button>
+  <button id="densityButton">Population Data</button>
+  <button id="toggle-restaurants">Pizza stores</button>
   <button id="floodProne">Flood Prone Area</button>
-  <button id="toggleButton">Toggle BBMP GeoJSON</button>
-  <button id="densityButton">Calculate Population Density</button>
-
+  <button id="GetMalls">Mall Hotspot</button>
+  
   
 
 
@@ -109,23 +48,18 @@
 // Get the toggle switch checkbox element
 // Get the toggle switch checkbox element
 var toggleSwitch = document.getElementById('toggle-restaurants');
-var toggleFloodProne=document.getElementById('toggle-floodprone');
-
 // Create a layer group for the restaurant markers
 var restaurantLayer = L.layerGroup();
-var floodlayer=L.layerGroup();
-
 // Add event listener for checkbox change
-toggleSwitch.addEventListener('change', function() {
-  if (this.checked) {
-    // If checkbox is checked, make the XHR request to get pizza restaurants and show them on the map
-    getPizzaRestaurants();
-  } else {
-    // If checkbox is unchecked, remove the restaurant layer from the map
+toggleSwitch.addEventListener('click', function() {
+  if (map.hasLayer(restaurantLayer)) {
+    // If the restaurant layer is already on the map, remove it
     removeRestaurantLayer();
+  } else {
+    // If the restaurant layer is not on the map, make the XHR request to get pizza restaurants and show them
+    getPizzaRestaurants();
   }
 });
-
 // Function to make XHR request to get pizza restaurants and show them on the map
 function getPizzaRestaurants() {
   var xhr = new XMLHttpRequest();
@@ -144,7 +78,6 @@ function getPizzaRestaurants() {
   };
   xhr.send();
 }
-
 // Function to update the restaurant layer on the map
 function updateRestaurantLayer(restaurantData) {
   // Check if the restaurant layer is already on the map
@@ -152,10 +85,8 @@ function updateRestaurantLayer(restaurantData) {
     // If not, add it to the map
     restaurantLayer.addTo(map);
   }
-
   // Clear existing restaurant markers from the layer
   restaurantLayer.clearLayers();
-
   // Add the restaurant markers to the layer
   for (var i = 0; i < restaurantData.length; i++) {
     var restaurant = restaurantData[i];
@@ -164,13 +95,12 @@ function updateRestaurantLayer(restaurantData) {
     color: color,
     fillColor: color,
     fillOpacity: 0.5,
-    radius: 100, // Adjust the radius of the circle as needed
+    radius: 10, // Adjust the radius of the circle as needed
   });
   circle.bindPopup(restaurant.name);
   restaurantLayer.addLayer(circle);
   }
 }
-
 // Function to remove the restaurant layer from the map
 function removeRestaurantLayer() {
   // Remove the restaurant layer from the map if it exists
@@ -180,54 +110,39 @@ function removeRestaurantLayer() {
   }
 }
 
-var floodProneLayer; // Variable to store the flood-prone areas layer
+var polylineLayer = L.layerGroup().addTo(map);
 
-// Function to retrieve flood-prone areas from the server and add the layer
-function getFloodProneAreas() {
-  // Make an AJAX request to the server
-  fetch('/flood-prone-areas')
-    .then(function(response) {
-      return response.json();
-    })
-    .then(function(data) {
-      // Create a Leaflet GeoJSON layer with the flood-prone areas data
-      console.log(data)
-      floodProneLayer = L.geoJSON(data, {
-        pointToLayer: function(feature, latlng) {
-          return L.circleMarker(latlng, {
-            radius: 6,
-            color: 'red',
-            fillColor: 'red',
-            fillOpacity: 1
-          });
-        }
-      }).addTo(map);
-    })
-    .catch(function(error) {
-      console.log('Error:', error);
+// Load the GeoJSON data
+fetch('/static/flood.geojson')
+  .then(function(response) {
+    return response.json();
+  })
+  .then(function(data) {
+    // Create polylines from the GeoJSON data
+    var polylines = L.geoJSON(data, {
+      style: function(feature) {
+        return { color: 'purple' };
+      }
     });
-}
 
-// Function to remove the flood-prone areas layer from the map
-function removeFloodProneLayer() {
-  if (floodProneLayer) {
-    map.removeLayer(floodProneLayer);
-    floodProneLayer = null;
-  }
-}
+    // Add the polylines to the layer group
+    polylineLayer.addLayer(polylines);
+  });
 
-// Event listener for the button click
-document.getElementById('floodProne').addEventListener('click', function() {
-  if (floodProneLayer) {
-    // Layer exists, so remove it
-    removeFloodProneLayer();
+// Toggle button functionality
+var toggleButton = document.getElementById('floodProne');
+var layerVisible = true; // Initial state of the layer
+
+toggleButton.addEventListener('click', function() {
+  if (layerVisible) {
+    map.removeLayer(polylineLayer);
+  
   } else {
-    // Layer doesn't exist, so retrieve and add it
-    getFloodProneAreas();
+    map.addLayer(polylineLayer);
+    
   }
+  layerVisible = !layerVisible; // Toggle the layer visibility state
 });
-
-
 
 // Function to handle the toggle event
 
@@ -359,6 +274,73 @@ function getDensityColor(density) {
   // Return a default color if density value exceeds the defined ranges
   return '#000';
 }
+
+var toggleMalls = document.getElementById('GetMalls');
+// Create a layer group for the restaurant markers
+var MallsLayer = L.layerGroup();
+// Add event listener for checkbox change
+toggleMalls.addEventListener('click', function() {
+  if (map.hasLayer(MallsLayer)) {
+    // If the restaurant layer is already on the map, remove it
+    removeMallLayer();
+  } else {
+    // If the restaurant layer is not on the map, make the XHR request to get pizza restaurants and show them
+    getMalls();
+  }
+});
+// Function to make XHR request to get pizza restaurants and show them on the map
+function getMalls() {
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/GET-malls', true);
+  xhr.setRequestHeader('Content-type', 'application/json');
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === XMLHttpRequest.DONE) {
+      if (xhr.status === 200) {
+        var data = JSON.parse(xhr.responseText);
+        // Use the response from the server to update the restaurant layer on the map
+        updateMallLayer(data);
+      } else {
+        console.log('Error: ' + xhr.status);
+      }
+    }
+  };
+  xhr.send();
+}
+// Function to update the restaurant layer on the map
+function updateMallLayer(MallData) {
+  // Check if the restaurant layer is already on the map
+  if (!map.hasLayer(MallsLayer)) {
+    // If not, add it to the map
+    MallsLayer.addTo(map);
+  }
+  // Clear existing restaurant markers from the layer
+  MallsLayer.clearLayers();
+  // Add the restaurant markers to the layer
+  for (var i = 0; i < MallData.length; i++) {
+    var mall = MallData[i];
+  console.log(mall)
+  var color = 'brown'; // Set the color of the mall circle
+var radius = 100; // Set the radius of the mall circle
+
+
+  var circle = L.circle([mall.lat, mall.lon],
+  {color: color,
+  fillColor: color,
+  fillOpacity: 0.5,
+  radius: radius})
+  circle.bindPopup(mall.name);
+  MallsLayer.addLayer(circle);
+  }
+}
+// Function to remove the restaurant layer from the map
+function removeMallLayer() {
+  // Remove the restaurant layer from the map if it exists
+  if (map.hasLayer(MallsLayer)) {
+    MallsLayer.clearLayers(); // Clear the markers from the layer
+    map.removeLayer(MallsLayer); // Remove the layer from the map
+  }
+}
+
 
 
   </script>
